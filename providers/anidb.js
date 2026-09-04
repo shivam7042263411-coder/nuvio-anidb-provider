@@ -1,160 +1,195 @@
-// AniDB Provider for Nuvio
-// Scrapes video sources from anidb.app
-// Uses only regex parsing - compatible with Hermes/QuickJS runtime (no external deps)
+// AniDB (anidb.app) Provider for Nuvio
+// QuickJS compatible - no external deps, regex based.
+//
+// Flow (matches anidb.app frontend runtime):
+//   tmdbId -> ani.zip mapping -> anilist_id
+//          -> AniList GraphQL -> anime title
+//          -> anidb /browse?q={title} -> anime slug -> numerical id
+//          -> /api/frontend/anime/{id}/episodes -> episode id
+//          -> /api/frontend/episode/{epId}/languages -> embed_url
+//          -> GET embed -> sources:[{file:'...m3u8'}] -> stream url
 
 var BASE = "https://anidb.app";
-var AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+var ANIZIP = "https://api.ani.zip/mappings";
+var ANILIST = "https://graphql.anilist.co";
+var AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
-function fetchText(url) {
-    return fetch(url, {
-        headers: {
+function fetchText(url, headers, method, body) {
+    var opts = {
+        headers: headers || {
             "User-Agent": AGENT,
             "Referer": BASE + "/"
         }
-    }).then(function(res) {
+    };
+    if (method) opts.method = method;
+    if (body) opts.body = body;
+    return fetch(url, opts).then(function(res) {
+        if (!res.ok) return "";
         return res.text();
+    }).catch(function() {
+        return "";
     });
 }
 
-function findAnimeByTmdb(tmdbId) {
-    var url = BASE + "/search/suggestions?q=tmdb" + tmdbId;
-    return fetchText(url)
-    .then(function(html) {
-        var slug = null;
-        var re = /href="https:\/\/anidb\.app\/anime\/([a-z0-9-]+-[0-9]+)"/g;
-        var m;
-        while ((m = re.exec(html)) !== null) {
-            slug = m[1];
-            break;
-        }
-        return slug;
+function safeJson(text) {
+    try {
+        return JSON.parse(text);
+    } catch (e) {
+        return null;
+    }
+}
+
+function mapAnilistFromTmdb(tmdbId) {
+    return fetchText(ANIZIP + "?themoviedb_id=" + encodeURIComponent(tmdbId), {
+        "Accept": "application/json",
+        "User-Agent": AGENT
+    }).then(function(text) {
+        var parsed = safeJson(text);
+        if (!parsed || !parsed.mappings) return "";
+        var id = parsed.mappings.anilist_id;
+        return id === undefined || id === null ? "" : String(id);
     });
 }
 
-function extractEpisodes(animeSlug) {
-    var url = BASE + "/anime/" + animeSlug;
-    return fetchText(url)
-    .then(function(html) {
-        var episodes = [];
+function titleFromAnilist(anilistId) {
+    if (!anilistId) return Promise.resolve("");
+    var query = "{ Media(id: " + anilistId + ") { title { romaji english } } }";
+    return fetchText(ANILIST, {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": AGENT
+    }, "POST", JSON.stringify({ query: query })).then(function(text) {
+        var parsed = safeJson(text);
+        if (!parsed || !parsed.data || !parsed.data.Media || !parsed.data.Media.title) return "";
+        var t = parsed.data.Media.title;
+        return t.english || t.romaji || "";
+    });
+}
 
-        // Match episode data attributes in the episode list
-        var re = /data-episode-id="([0-9]+)"[^>]*data-number="([0-9]+)"/g;
-        var m;
-        while ((m = re.exec(html)) !== null) {
-            episodes.push({ id: m[1], number: parseInt(m[2]) });
-        }
+function searchAnime(title) {
+    if (!title) return Promise.resolve("");
+    var url = BASE + "/browse?q=" + encodeURIComponent(title);
+    return fetchText(url).then(function(html) {
+        var re = /\/anime\/([a-z0-9-]+-[0-9]+)/g;
+        var m = re.exec(html);
+        return m ? m[1] : "";
+    });
+}
 
-        // Fallback: parse episode server/embed links
-        if (episodes.length === 0) {
-            var re2 = /href="([^"]*\/watch\/[^"]*\/[0-9]+)"/g;
-            while ((m = re2.exec(html)) !== null) {
-                var numMatch = m[1].match(/\/([0-9]+)$/);
-                if (numMatch) {
-                    episodes.push({ number: parseInt(numMatch[1]), url: m[1] });
+function numericalIdFromSlug(slug) {
+    if (!slug) return "";
+    var m = slug.match(/-([0-9]+)$/);
+    return m ? m[1] : "";
+}
+
+function findEpisode(animeId, episodeNum) {
+    var url = BASE + "/api/frontend/anime/" + animeId + "/episodes";
+    return fetchText(url, { "Accept": "application/json", "User-Agent": AGENT })
+        .then(function(text) {
+            var parsed = safeJson(text);
+            if (!parsed || !parsed.episodes) return null;
+            for (var i = 0; i < parsed.episodes.length; i++) {
+                var ep = parsed.episodes[i];
+                if (String(ep.number) === String(episodeNum)) {
+                    return String(ep.id);
                 }
             }
-        }
-
-        return episodes;
-    });
+            return null;
+        });
 }
 
-function extractEmbedId(episodeId) {
-    var url = BASE + "/ajax/episode/servers?episodeId=" + episodeId;
-    return fetchText(url)
-    .then(function(html) {
-        // Find first embed/server id in the response
-        var re = /data-id="([^"]+)"/;
+function getEmbedUrl(episodeId) {
+    var url = BASE + "/api/frontend/episode/" + episodeId + "/languages";
+    return fetchText(url, { "Accept": "application/json", "User-Agent": AGENT })
+        .then(function(text) {
+            var parsed = safeJson(text);
+            if (!parsed || !parsed.languages || parsed.languages.length === 0) return "";
+            var embed = parsed.languages[0].embed_url;
+            return embed || "";
+        });
+}
+
+function extractM3u8(embedUrl) {
+    if (!embedUrl) return Promise.resolve([]);
+    return fetchText(embedUrl).then(function(html) {
+        var re = /sources:\s*\[{\s*file:\s*['"]([^'"]+)['"]/;
         var m = html.match(re);
-        return m ? m[1] : null;
+        if (m && m[1]) {
+            return [{ url: m[1], label: "Master HLS" }];
+        }
+        var re2 = /https:\/\/hls\.anidb\.app\/stream\/[^"'\s,)]+master\.m3u8/g;
+        var streams = [];
+        var mm;
+        while ((mm = re2.exec(html)) !== null) {
+            streams.push({ url: mm[0], label: "Master HLS" });
+        }
+        return streams;
     });
 }
 
-function extractM3u8(embedId) {
-    var url = BASE + "/ajax/episode/sources?id=" + embedId;
-    return fetchText(url)
-    .then(function(html) {
-        // Look for iframe src
-        var frameRe = /src="([^"]+)"/;
-        var frame = html.match(frameRe);
-        if (!frame) return null;
-
-        var embedUrl = frame[1];
-        if (embedUrl.indexOf("http") !== 0) {
-            embedUrl = BASE + embedUrl;
-        }
-
-        return fetchText(embedUrl);
-    })
-    .then(function(embedHtml) {
-        if (!embedHtml) return null;
-
-        // Extract hls.anidb.app master.m3u8 URL
-        var re = /hls\.anidb\.app\/stream\/[^"'\s,)]+master\.m3u8/;
-        var m = embedHtml.match(re);
-        if (!m) return null;
-
-        return "https://" + m[0];
-    });
+function buildResult(streams, mediaType, season, episode) {
+    var title = mediaType === "movie"
+        ? "Movie " + (season || 1)
+        : "S" + String(season || 1).padStart(2, "0") + "E" + String(episode || 1).padStart(2, "0");
+    var out = [];
+    var seen = {};
+    for (var i = 0; i < streams.length; i++) {
+        var s = streams[i];
+        if (!s.url || seen[s.url]) continue;
+        seen[s.url] = true;
+        out.push({
+            name: "AniDB HLS",
+            title: title,
+            url: s.url,
+            quality: 1080,
+            headers: {
+                "Referer": BASE + "/",
+                "User-Agent": AGENT
+            }
+        });
+    }
+    return out;
 }
 
 function getStreams(tmdbId, mediaType, season, episode) {
-    console.log("[AniDB] Fetching " + mediaType + " " + tmdbId);
+    season = Number(season) || 1;
+    episode = Number(episode) || 1;
+    var isMovie = mediaType === "movie";
+    if (isMovie) episode = 1;
 
-    return findAnimeByTmdb(tmdbId)
-    .then(function(slug) {
-        if (!slug) {
-            console.log("[AniDB] Could not find anime for TMDB ID " + tmdbId);
-            return null;
-        }
-        console.log("[AniDB] Found anime slug: " + slug);
-        return extractEpisodes(slug);
-    })
-    .then(function(episodes) {
-        if (!episodes || episodes.length === 0) {
-            console.log("[AniDB] No episodes found");
-            return [];
-        }
-
-        var target = episodes.find(function(ep) {
-            return ep.number === episode;
-        });
-        if (!target) {
-            console.log("[AniDB] Episode " + episode + " not found");
-            return [];
-        }
-        console.log("[AniDB] Found episode " + episode + " (id: " + target.id + ")");
-        return target.id;
-    })
-    .then(function(episodeId) {
-        if (!episodeId) return [];
-        return extractEmbedId(episodeId);
-    })
-    .then(function(embedId) {
-        if (!embedId) return [];
-        return extractM3u8(embedId);
-    })
-    .then(function(streamUrl) {
-        if (!streamUrl) {
-            console.log("[AniDB] No stream URL extracted");
-            return [];
-        }
-        console.log("[AniDB] Stream found: " + streamUrl);
-        return [{
-            name: "AniDB",
-            title: "Episode " + episode,
-            url: streamUrl,
-            quality: "1080p",
-            headers: {
-                "Referer": "https://anidb.app/",
-                "User-Agent": AGENT
+    return mapAnilistFromTmdb(tmdbId)
+        .then(function(anilistId) {
+            return titleFromAnilist(anilistId);
+        })
+        .then(function(title) {
+            if (!title) return "";
+            if (!isMovie && season > 1) {
+                // Prefer the specific season entry for multi-season shows
+                var seasonTerm = title.match(/ season \d+$/i) ? title : title + " Season " + season;
+                return searchAnime(seasonTerm).then(function(slug) {
+                    return slug || searchAnime(title);
+                });
             }
-        }];
-    })
-    .catch(function(err) {
-        console.error("[AniDB] Error:", err.message);
-        return [];
-    });
+            return searchAnime(title);
+        })
+        .then(function(slug) {
+            if (!slug) return [];
+            return findEpisode(numericalIdFromSlug(slug), episode || 1);
+        })
+        .then(function(episodeId) {
+            if (!episodeId) return [];
+            return getEmbedUrl(episodeId);
+        })
+        .then(function(embedUrl) {
+            if (!embedUrl) return [];
+            return extractM3u8(embedUrl);
+        })
+        .then(function(streams) {
+            return buildResult(streams, mediaType, season, episode);
+        })
+        .catch(function() {
+            return [];
+        });
 }
 
 module.exports = { getStreams };
