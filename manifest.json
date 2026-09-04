@@ -1,7 +1,7 @@
 {
-  "name": "AniDB + Miruro Provider",
-  "version": "1.1.0",
-  "description": "Anime streaming providers for anidb.app and miruro.tv",
+  "name": "AniDB + Aniwaves Provider",
+  "version": "1.2.0",
+  "description": "Anime streaming providers for anidb.app and aniwaves.ru",
   "author": "shivam7042263411-coder",
   "scrapers": [
     {
@@ -22,19 +22,19 @@
       "limited": false
     },
     {
-      "id": "miruro",
-      "name": "Miruro",
-      "description": "Scrapes anime video sources from miruro.tv",
+      "id": "aniwaves",
+      "name": "Aniwaves",
+      "description": "Scrapes anime video sources from aniwaves.ru",
       "version": "1.0.0",
-      "filename": "providers/miruro.js",
+      "filename": "providers/aniwaves.js",
       "supportedTypes": ["tv", "movie"],
       "enabled": true,
       "hasSettings": false,
-      "logo": "https://www.miruro.tv/favicon.ico",
+      "logo": "https://aniwaves.ru/favicon.ico",
       "contentLanguage": ["en"],
       "supportedPlatforms": [],
       "disabledPlatforms": [],
-      "formats": ["m3u8"],
+      "formats": ["m3u8", "mp4"],
       "supportsExternalPlayer": true,
       "limited": false
     }
