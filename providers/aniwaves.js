@@ -19,6 +19,17 @@ var LOCAL_TMDB_MAP = {"81":572,"128":164,"129":199,"149":47,"151":3460,"160":105
 //          -> /ajax/server/list?servers={id}&eps={n} (TWO query params!)
 //          -> /ajax/sources?id={linkId}&asi=0&autoPlay=0 -> result.url (embed)
 
+function dbg(step, msg) {
+    try {
+        console.log("[aniwaves] " + step + ": " + (msg === undefined || msg === null ? "null" : msg));
+    } catch (e) {}
+}
+
+function pad2(n) {
+    n = String(n);
+    return n.length < 2 ? "0" + n : n;
+}
+
 var BASE = "https://aniwaves.ru";
 var ANIZIP = "https://api.ani.zip/mappings";
 var ANILIST = "https://graphql.anilist.co";
@@ -174,7 +185,7 @@ function resolveEmbedUrl(linkId, slug, episodeNum) {
 function buildResult(embedUrl, mediaType, season, episode, serverName, slug) {
     var title = mediaType === "movie"
         ? "Movie " + (season || 1)
-        : "S" + String(season || 1).padStart(2, "0") + "E" + String(episode || 1).padStart(2, "0");
+        : "S" + pad2(season || 1) + "E" + pad2(episode || 1);
     if (!embedUrl) return [];
     return [{
         name: "Aniwave " + (serverName || ""),
@@ -192,27 +203,55 @@ function getStreams(tmdbId, mediaType, season, episode) {
     season = Number(season) || 1;
     episode = Number(episode) || 1;
     if (mediaType === "movie") episode = 1;
+    var diag = [];
+    function note(step, msg) { diag.push(step + "=" + msg); dbg(step, msg); }
+    note("start", "tmdbId=" + tmdbId + " mediaType=" + mediaType + " season=" + season + " episode=" + episode);
+
+    function debugStream(result) {
+        // surfacing the failure step in the UI (temporary diagnostic)
+        if (result && result.length > 0) return result;
+        return [{ name: "Aniwave (debug)", title: diag.join(" | "), url: "", quality: 0, headers: {} }];
+    }
 
     return mapAnilistFromTmdb(tmdbId)
         .then(function(anilistId) {
-            if (!anilistId) return "";
+            note("mapping", anilistId ? anilistId : "FAIL-ani.zip-and-local-map-miss");
+            if (!anilistId) return null;
             return titleFromAnilist(anilistId);
         })
         .then(function(title) {
-            if (!title) return [];
+            note("title", title ? title : "(none)");
+            if (!title) return null;
             return searchWatchId(title).then(function(w) {
-                if (!w) return [];
+                note("search", w ? ("id=" + w.id + " slug=" + w.slug) : "(no match)");
+                if (!w) return null;
                 return findEpisodeDataIds(w.id, w.slug, episode).then(function(serverInfo) {
-                    if (!serverInfo) return [];
+                    note("episodes", serverInfo ? ("id=" + serverInfo.id + " ep=" + serverInfo.ep) : "(no episode)");
+                    if (!serverInfo) return null;
                     serverInfo.slug = w.slug;
                     return pickServerLinkId(serverInfo, episode, false).then(function(linkId) {
-                        if (!linkId) return [];
+                        note("server", linkId ? ("linkId=" + String(linkId).substr(0, 24) + "...") : "(no server)");
+                        if (!linkId) return null;
                         return resolveEmbedUrl(linkId, w.slug, episode).then(function(embedUrl) {
+                            note("sources", embedUrl ? ("url=" + String(embedUrl).substr(0, 40) + "...") : "(no embed)");
                             return buildResult(embedUrl, mediaType, season, episode, "Embed", w.slug);
                         });
                     });
                 });
             });
+        })
+        .then(function(res) {
+            if (res && res.length > 0) return res;
+            return debugStream([]);
+        })
+        .catch(function(err) {
+            try {
+                var m = err && err.message ? err.message : String(err);
+                note("EXCEPTION", m);
+            } catch (e) {
+                note("EXCEPTION", "unknown");
+            }
+            return debugStream([]);
         });
 }
 
