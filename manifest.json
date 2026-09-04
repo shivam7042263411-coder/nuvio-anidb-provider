@@ -1,18 +1,25 @@
-[
-  {
-    "id": "anidb",
-    "name": "AniDB",
-    "description": "Anime streaming provider that scrapes video sources from anidb.app",
-    "version": "1.0.0",
-    "author": "Nuvio Community",
-    "supportedTypes": ["tv"],
-    "filename": "providers/anidb.js",
-    "enabled": true,
-    "logo": "https://anidb.app/favicon.ico",
-    "contentLanguage": ["en"],
-    "formats": ["m3u8", "mp4"],
-    "limited": false,
-    "disabledPlatforms": [],
-    "supportsExternalPlayer": true
-  }
-]
+{
+  "name": "AniDB Provider",
+  "version": "1.0.0",
+  "description": "Anime streaming provider that scrapes video sources from anidb.app",
+  "author": "shivam7042263411-coder",
+  "scrapers": [
+    {
+      "id": "anidb",
+      "name": "AniDB",
+      "description": "Scrapes anime video sources from anidb.app",
+      "version": "1.0.0",
+      "filename": "providers/anidb.js",
+      "supportedTypes": ["tv", "movie"],
+      "enabled": true,
+      "hasSettings": false,
+      "logo": "https://anidb.app/favicon.ico",
+      "contentLanguage": ["en"],
+      "supportedPlatforms": [],
+      "disabledPlatforms": [],
+      "formats": ["m3u8", "mp4"],
+      "supportsExternalPlayer": true,
+      "limited": false
+    }
+  ]
+}
