@@ -30,6 +30,7 @@ function pad2(n) {
     return n.length < 2 ? "0" + n : n;
 }
 
+var PROVIDER_VER = "aniwaves-1.1.0";
 var BASE = "https://aniwaves.ru";
 var ANIZIP = "https://api.ani.zip/mappings";
 var ANILIST = "https://graphql.anilist.co";
@@ -205,7 +206,7 @@ function getStreams(tmdbId, mediaType, season, episode) {
     if (mediaType === "movie") episode = 1;
     var diag = [];
     function note(step, msg) { diag.push(step + "=" + msg); dbg(step, msg); }
-    note("start", "tmdbId=" + tmdbId + " mediaType=" + mediaType + " season=" + season + " episode=" + episode);
+    note("start", "v=" + PROVIDER_VER + " tmdbId=" + tmdbId + " mediaType=" + mediaType + " season=" + season + " episode=" + episode);
 
     function debugStream(result) {
         // surfacing the failure step in the UI (temporary diagnostic).
