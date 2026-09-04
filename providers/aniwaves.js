@@ -88,6 +88,70 @@ function titleFromAnilist(anilistId) {
     });
 }
 
+// ---------- id-agnostic resolution ----------
+// Nuvio passes ids like "kitsu:47083:1", "tmdb:94664:1", "mal:39535:1",
+// "anilist:108465:1", or a plain number. The trailing ":1" is the season.
+// We normalize to a canonical title that aniwaves can be searched by.
+function isDigits(s) { return /^[0-9]+$/.test(s); }
+
+function parseRawId(raw) {
+    if (!raw) return null;
+    var s = String(raw).trim();
+    if (!s || s === "undefined" || s === "null") return null;
+    var parts = s.split(":");
+    if (parts.length === 1 && isDigits(parts[0])) {
+        return { ns: "tmdb", id: parts[0] };
+    }
+    // accept "<ns>:<id>" and "<ns>:<id>:<season>"
+    var ns = (parts[0] || "").toLowerCase().trim();
+    var id = (parts[1] || "").trim();
+    if (!ns || !isDigits(id || "")) return null;
+    return { ns: ns, id: id };
+}
+
+function fetchTitleByScheme(scheme) {
+    if (!scheme || !isDigits(scheme.id)) return Promise.resolve("");
+    if (scheme.ns === "kitsu") {
+        return fetchText("https://kitsu.io/api/edge/anime/" + scheme.id, {
+            "Accept": "application/vnd.api+json",
+            "User-Agent": AGENT
+        }).then(function(text) {
+            var parsed = safeJson(text);
+            if (parsed && parsed.data && parsed.data.attributes) {
+                return parsed.data.attributes.canonicalTitle || "";
+            }
+            return "";
+        });
+    }
+    if (scheme.ns === "mal") {
+        return fetchText("https://api.jikan.moe/v4/anime/" + scheme.id, {
+            "Accept": "application/json",
+            "User-Agent": AGENT
+        }).then(function(text) {
+            var parsed = safeJson(text);
+            if (parsed && parsed.data) {
+                return parsed.data.title_english || parsed.data.title || "";
+            }
+            return "";
+        });
+    }
+    if (scheme.ns === "anilist") {
+        return _anilistTitle(scheme.id);
+    }
+    // tmdb (or unknown -> assume tmdb)
+    return _tmdbTitle(scheme.id);
+}
+
+function _tmdbTitle(tmdbId) {
+    return mapAnilistFromTmdb(tmdbId).then(function(anilistId) {
+        return anilistId ? titleFromAnilist(anilistId) : "";
+    });
+}
+
+function _anilistTitle(anilistId) {
+    return titleFromAnilist(anilistId);
+}
+
 // ---------- aniwaves search -> watch id + slug ----------
 function searchWatchId(title) {
     if (!title) return Promise.resolve(null);
@@ -216,12 +280,10 @@ function getStreams(tmdbId, mediaType, season, episode) {
         return [{ name: "Aniwave (debug)", title: text, url: "about:debug#" + text, quality: 0, headers: {} }];
     }
 
-    return mapAnilistFromTmdb(tmdbId)
-        .then(function(anilistId) {
-            note("mapping", anilistId ? anilistId : "FAIL-ani.zip-and-local-map-miss");
-            if (!anilistId) return null;
-            return titleFromAnilist(anilistId);
-        })
+    var scheme = parseRawId(tmdbId);
+    note("ns", scheme ? (scheme.ns + ":" + scheme.id) : "(unparseable)");
+
+    return fetchTitleByScheme(scheme)
         .then(function(title) {
             note("title", title ? title : "(none)");
             if (!title) return null;

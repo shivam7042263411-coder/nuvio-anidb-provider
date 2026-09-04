@@ -41,12 +41,12 @@ https://raw.githubusercontent.com/shivam7042263411-coder/nuvio-anidb-provider/ma
 
 ## How It Works
 
-The providers are given only a TMDB ID by Nuvio, so they first resolve the title/AniList ID before searching the source sites (which require a title, not a TMDB ID).
+The providers are given only an ID by Nuvio (typically a namespaced anime id like `kitsu:47083:1`, `tmdb:94664:1`, `mal:39535:1`, `anilist:108465:1`, or a plain TMDB number; the trailing `:1` is the season). They first resolve that id to a canonical anime title, then search the source sites (which require a title, not an id).
 
-### Mapping (shared by both providers)
+### Mapping (shared by both providers) — id-agnostic
 
-1. **mapping** — `TMDB ID` → `https://api.ani.zip/mappings?themoviedb_id={id}` → AniList ID (no API key; NOTE: coverage is incomplete — some TMDB IDs are not in the mapping and resolve to nothing)
-2. **title** — AniList `graphql.anilist.co` (no API key) → the anime's English/Romaji title
+1. **parse** — split the incoming id into `{namespace, id}`: `kitsu:` → Kitsu API title, `mal:` → Jikan/MAL title, `anilist:` → AniList GraphQL title, `tmdb:`/plain → `https://api.ani.zip/mappings?themoviedb_id={id}` → AniList ID (with an embedded local TMDB→AniList fallback map for ids ani.zip doesn't cover)
+2. **title** — AniList `graphql.anilist.co` / Kitsu / Jikan (no API keys) → the anime's English/Romaji title
 
 ### AniDB (anidb.app)
 

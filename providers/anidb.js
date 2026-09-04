@@ -74,6 +74,59 @@ function titleFromAnilist(anilistId) {
     });
 }
 
+// ---------- id-agnostic resolution ----------
+// Nuvio passes ids like "kitsu:47083:1", "tmdb:94664:1", "mal:39535:1",
+// "anilist:108465:1", or a plain number. The trailing ":1" is the season.
+function isDigits(s) { return /^[0-9]+$/.test(s); }
+
+function parseRawId(raw) {
+    if (!raw) return null;
+    var s = String(raw).trim();
+    if (!s || s === "undefined" || s === "null") return null;
+    var parts = s.split(":");
+    if (parts.length === 1 && isDigits(parts[0])) {
+        return { ns: "tmdb", id: parts[0] };
+    }
+    var ns = (parts[0] || "").toLowerCase().trim();
+    var id = (parts[1] || "").trim();
+    if (!ns || !isDigits(id || "")) return null;
+    return { ns: ns, id: id };
+}
+
+function fetchTitleByScheme(scheme) {
+    if (!scheme || !isDigits(scheme.id)) return Promise.resolve("");
+    if (scheme.ns === "kitsu") {
+        return fetchText("https://kitsu.io/api/edge/anime/" + scheme.id, {
+            "Accept": "application/vnd.api+json",
+            "User-Agent": AGENT
+        }).then(function(text) {
+            var parsed = safeJson(text);
+            if (parsed && parsed.data && parsed.data.attributes) {
+                return parsed.data.attributes.canonicalTitle || "";
+            }
+            return "";
+        });
+    }
+    if (scheme.ns === "mal") {
+        return fetchText("https://api.jikan.moe/v4/anime/" + scheme.id, {
+            "Accept": "application/json",
+            "User-Agent": AGENT
+        }).then(function(text) {
+            var parsed = safeJson(text);
+            if (parsed && parsed.data) {
+                return parsed.data.title_english || parsed.data.title || "";
+            }
+            return "";
+        });
+    }
+    if (scheme.ns === "anilist") {
+        return titleFromAnilist(scheme.id);
+    }
+    return mapAnilistFromTmdb(scheme.id).then(function(anilistId) {
+        return anilistId ? titleFromAnilist(anilistId) : "";
+    });
+}
+
 function searchAnime(title) {
     if (!title) return Promise.resolve("");
     var url = BASE + "/browse?q=" + encodeURIComponent(title);
@@ -135,10 +188,12 @@ function extractM3u8(embedUrl) {
     });
 }
 
+function pad2(n) { n = String(n); return n.length < 2 ? "0" + n : n; }
+
 function buildResult(streams, mediaType, season, episode) {
     var title = mediaType === "movie"
         ? "Movie " + (season || 1)
-        : "S" + String(season || 1).padStart(2, "0") + "E" + String(episode || 1).padStart(2, "0");
+        : "S" + pad2(season || 1) + "E" + pad2(episode || 1);
     var out = [];
     var seen = {};
     for (var i = 0; i < streams.length; i++) {
@@ -165,10 +220,7 @@ function getStreams(tmdbId, mediaType, season, episode) {
     var isMovie = mediaType === "movie";
     if (isMovie) episode = 1;
 
-    return mapAnilistFromTmdb(tmdbId)
-        .then(function(anilistId) {
-            return titleFromAnilist(anilistId);
-        })
+    return fetchTitleByScheme(parseRawId(tmdbId))
         .then(function(title) {
             if (!title) return "";
             if (!isMovie && season > 1) {
