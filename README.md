@@ -40,7 +40,9 @@ https://raw.githubusercontent.com/shivam7042263411-coder/nuvio-anidb-provider/ma
 
 ## How It Works
 
-The provider is given only a TMDB ID by Nuvio, so it resolves the anime title before searching anidb.app (which requires a title):
+The providers are given only a TMDB ID by Nuvio, so they first resolve the title/AniList ID before searching the source sites (which require a title, not a TMDB ID).
+
+### AniDB (anidb.app)
 
 1. **mapping** — `TMDB ID` → `https://api.ani.zip/mappings?themoviedb_id={id}` → AniList ID (no API key)
 2. **title** — AniList `graphql.anilist.co` (no API key) → the anime's English/Romaji title
@@ -48,6 +50,13 @@ The provider is given only a TMDB ID by Nuvio, so it resolves the anime title be
 4. **episodes** — `https://anidb.app/api/frontend/anime/{numId}/episodes` → find episode by number → episode id
 5. **languages/embeds** — `https://anidb.app/api/frontend/episode/{epId}/languages` → first `embed_url`
 6. **stream** — `GET embed_url` → regex `sources:[{file:'...'}]` → direct `hls.anidb.app/.../master.m3u8`
+
+### Miruro (miruro.tv)
+
+1. **mapping** — `TMDB ID` → `api.ani.zip` → AniList ID (same as above)
+2. **episodes** — call miruro's `secure/pipe` API (`path: episodes`, `anilistId`) → provider/category episode list
+3. **sources** — call `secure/pipe` (`path: sources`, base64url episode id) → `streams[].url` (direct m3u8)
+4. **decoding** — the pipe response is base64 + gzip; a bundled pure-JS DEFLATE inflater decodes it (Nuvio strips `Accept-Encoding`, so it may also arrive uncompressed)
 
 ## Stream Object
 
@@ -69,11 +78,17 @@ The provider is given only a TMDB ID by Nuvio, so it resolves the anime title be
 
 ## Limitations
 
-- Relies on anidb.app's current page/API structure; may need updates if they change it
-- Anime must be indexed on anidb.app and resolvable via AniList/TMDB mapping
+- Relies on the source sites' current page/API structure; may need updates if they change it
+- Anime must be indexed on the source and resolvable via the TMDB/AniList mapping
 - anidb.app is behind Cloudflare; on-device requests use Nuvio's native HTTP stack (real TLS) and usually succeed, but strict bot protection may occasionally return a 503
+- miruro.tv's `secure/pipe` endpoint is also Cloudflare-protected and may 403 from some networks; it can only be verified on-device
 - Multi-season series are matched best-effort by appending "Season N" to the search
-- Some episodes may not resolve if embed structure changes
+- The gzip/DEFLATE inflater is a compact pure-JS implementation; it has been unit-tested against reference data but only the full on-device path can confirm end-to-end
+
+## Source Status
+
+- **anidb.app** had a genuine maintenance outage (503 "Under Maintenance") starting ~Sep 3, 2026; it should recover on its own.
+- **miruro.tv** could not be reached from development environments (Cloudflare datacenter blocks) — it must be tested from the device.
 
 ## Disclaimer
 

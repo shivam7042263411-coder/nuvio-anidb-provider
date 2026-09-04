@@ -1,7 +1,7 @@
 {
-  "name": "AniDB Provider",
-  "version": "1.0.0",
-  "description": "Anime streaming provider that scrapes video sources from anidb.app",
+  "name": "AniDB + Miruro Provider",
+  "version": "1.1.0",
+  "description": "Anime streaming providers for anidb.app and miruro.tv",
   "author": "shivam7042263411-coder",
   "scrapers": [
     {
@@ -18,6 +18,23 @@
       "supportedPlatforms": [],
       "disabledPlatforms": [],
       "formats": ["m3u8", "mp4"],
+      "supportsExternalPlayer": true,
+      "limited": false
+    },
+    {
+      "id": "miruro",
+      "name": "Miruro",
+      "description": "Scrapes anime video sources from miruro.tv",
+      "version": "1.0.0",
+      "filename": "providers/miruro.js",
+      "supportedTypes": ["tv", "movie"],
+      "enabled": true,
+      "hasSettings": false,
+      "logo": "https://www.miruro.tv/favicon.ico",
+      "contentLanguage": ["en"],
+      "supportedPlatforms": [],
+      "disabledPlatforms": [],
+      "formats": ["m3u8"],
       "supportsExternalPlayer": true,
       "limited": false
     }
