@@ -12,7 +12,12 @@ A custom JavaScript streaming provider plugin for the [Nuvio](https://github.com
 ## Manifest URL
 
 ```
-https://raw.githubusercontent.com/YOUR_USERNAME/nuvio-anidb-provider/main/manifest.json
+https://raw.githubusercontent.com/shivam7042263411-coder/nuvio-anidb-provider/main/manifest.json
+```
+
+Provider file (referenced by the manifest):
+```
+https://raw.githubusercontent.com/shivam7042263411-coder/nuvio-anidb-provider/main/providers/anidb.js
 ```
 
 ## Installation
@@ -35,10 +40,14 @@ https://raw.githubusercontent.com/YOUR_USERNAME/nuvio-anidb-provider/main/manife
 
 ## How It Works
 
-1. **Search** — Resolves the TMDB ID to an anidb.app anime slug
-2. **Episodes** — Scrapes the episode list from the anime page
-3. **Sources** — Fetches the embed server for the target episode
-4. **Stream** — Extracts the direct `hls.anidb.app/.../master.m3u8` URL
+The provider is given only a TMDB ID by Nuvio, so it resolves the anime title before searching anidb.app (which requires a title):
+
+1. **mapping** — `TMDB ID` → `https://api.ani.zip/mappings?themoviedb_id={id}` → AniList ID (no API key)
+2. **title** — AniList `graphql.anilist.co` (no API key) → the anime's English/Romaji title
+3. **search** — `https://anidb.app/browse?q={title}` → anime slug (e.g. `demon-slayer-kimetsu-no-yaiba-1217`)
+4. **episodes** — `https://anidb.app/api/frontend/anime/{numId}/episodes` → find episode by number → episode id
+5. **languages/embeds** — `https://anidb.app/api/frontend/episode/{epId}/languages` → first `embed_url`
+6. **stream** — `GET embed_url` → regex `sources:[{file:'...'}]` → direct `hls.anidb.app/.../master.m3u8`
 
 ## Stream Object
 
@@ -55,12 +64,15 @@ https://raw.githubusercontent.com/YOUR_USERNAME/nuvio-anidb-provider/main/manife
 ## Requirements
 
 - Nuvio app (sideloaded version — store versions don't support plugins)
+- Network access to anidb.app, api.ani.zip, and graphql.anilist.co
 - Node.js 18+ for local development only
 
 ## Limitations
 
-- Relies on anidb.app's current page structure; may need updates if they change it
-- Anime must be indexed on anidb.app
+- Relies on anidb.app's current page/API structure; may need updates if they change it
+- Anime must be indexed on anidb.app and resolvable via AniList/TMDB mapping
+- anidb.app is behind Cloudflare; on-device requests use Nuvio's native HTTP stack (real TLS) and usually succeed, but strict bot protection may occasionally return a 503
+- Multi-season series are matched best-effort by appending "Season N" to the search
 - Some episodes may not resolve if embed structure changes
 
 ## Disclaimer
