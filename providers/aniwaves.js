@@ -208,9 +208,11 @@ function getStreams(tmdbId, mediaType, season, episode) {
     note("start", "tmdbId=" + tmdbId + " mediaType=" + mediaType + " season=" + season + " episode=" + episode);
 
     function debugStream(result) {
-        // surfacing the failure step in the UI (temporary diagnostic)
+        // surfacing the failure step in the UI (temporary diagnostic).
+        // url MUST be non-blank: Nuvio's result parser drops entries with blank urls.
         if (result && result.length > 0) return result;
-        return [{ name: "Aniwave (debug)", title: diag.join(" | "), url: "", quality: 0, headers: {} }];
+        var text = "Aniwave debug: " + diag.join(" | ");
+        return [{ name: "Aniwave (debug)", title: text, url: "about:debug#" + text, quality: 0, headers: {} }];
     }
 
     return mapAnilistFromTmdb(tmdbId)
