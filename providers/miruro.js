@@ -294,7 +294,13 @@ function pipeRequest(path, query) {
         "sec-fetch-site": "same-origin",
         "sec-fetch-mode": "cors",
         "sec-fetch-dest": "empty"
-    }).then(pipeDecode);
+    }).then(function(text) {
+        console.log("[Miruro] pipe(" + path + ") raw: " + (text || "").slice(0, 300));
+        return pipeDecode(text);
+    }).then(function(data) {
+        console.log("[Miruro] pipe(" + path + ") decoded keys: " + (data ? Object.keys(data).join(",") : "null"));
+        return data;
+    });
 }
 
 function mapAnilistFromTmdb(tmdbId) {
@@ -303,6 +309,7 @@ function mapAnilistFromTmdb(tmdbId) {
         "User-Agent": AGENT
     }).then(function(text) {
         var parsed = safeJson(text);
+        console.log("[Miruro] ani.zip response: " + (text || "").slice(0, 200));
         if (!parsed || !parsed.mappings) return "";
         var id = parsed.mappings.anilist_id;
         return id === undefined || id === null ? "" : String(id);
@@ -373,9 +380,11 @@ function getStreams(tmdbId, mediaType, season, episode) {
 
     return mapAnilistFromTmdb(tmdbId)
         .then(function(anilistId) {
+            console.log("[Miruro] tmdb=" + tmdbId + " anilistId=" + anilistId);
             if (!anilistId) return [];
             return pipeRequest("episodes", { anilistId: Number(anilistId) }).then(function(data) {
                 var picked = pickEpisode(data, episode, false);
+                console.log("[Miruro] picked=" + JSON.stringify(picked ? { p: picked.provider, c: picked.category, n: picked.episode.number, id: String(picked.episode.id).slice(0, 40) } : null));
                 if (!picked) return [];
                 var epId = picked.episode.id;
                 // Some providers give the episodeId inline; mirror the frontend secret encoding
@@ -388,11 +397,14 @@ function getStreams(tmdbId, mediaType, season, episode) {
                 }).then(function(src) {
                     if (src && typeof src === "object") src.providerLabel = picked.provider;
                     var title = (mediaType === "movie" ? "Movie" : "S" + String(season).padStart(2, "0") + "E" + String(episode).padStart(2, "0"));
-                    return makeStreams(src, title);
+                    var streams = makeStreams(src, title);
+                    console.log("[Miruro] streams found: " + streams.length);
+                    return streams;
                 });
             });
         })
-        .catch(function() {
+        .catch(function(err) {
+            console.log("[Miruro] error: " + (err && err.message));
             return [];
         });
 }
