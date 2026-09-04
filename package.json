@@ -1,0 +1,19 @@
+{
+  "name": "nuvio-anidb-provider",
+  "version": "1.0.0",
+  "description": "AniDB streaming provider for Nuvio app",
+  "main": "providers/anidb.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test.js"
+  },
+  "keywords": [
+    "nuvio",
+    "anime",
+    "anidb",
+    "streaming",
+    "provider"
+  ],
+  "author": "Nuvio Community",
+  "license": "MIT"
+}
